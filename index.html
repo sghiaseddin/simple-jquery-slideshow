@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content="" />
+    <meta name="keywords" content="" />
+    <title>Sildeshow Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" lang="en" />
+    <meta name="robots" content="noindex, nofollow, noarchive, noodp, noydir" />
+    <script type="text/javascript" src="./vendor/jquery.min.js"></script>
+    <script type="text/javascript" src="./vendor/exif-js-2.3.0/exif.js"></script>
+    <script type="text/javascript" src="./vendor/xmp-js-0.0.3/dist/xmp.iife.min.js"></script>
+    <style>
+    #slideshow-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: black;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+    }
+
+    #slideshow-container figure {
+        display: none;
+        margin: 0;
+    }
+
+    #slideshow-container figure > img {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 100vw;
+        max-height: 100vh;
+    }
+
+    #slideshow-container figure > figcaption {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        max-width: 50%;
+        font-size: 1em;
+        font-family: sans-serif;
+        background-color: rgba(0,0,0,0.5);
+        color: white;
+        border: none;
+        padding: 10px;
+        line-height: 1em;
+    }
+
+    #slideshow-container img#loading-image {
+        display: block;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 200px;
+        height: 200px;
+        z-index: 0;
+    }
+
+    #navigation {
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        transform: translateX(10px);
+    }
+
+    #navigation button {
+        font-size: 2em;
+        background-color: rgba(0,0,0,0.5);
+        color: white;
+        border: none;
+        padding: 10px;
+        line-height: 1em;
+        min-width: 50px;
+        height: 75px;
+        vertical-align: bottom;
+    }
+
+    #navigation button:hover {
+        cursor: pointer;
+    }
+
+    #navigation button#next-button,
+    #navigation button#prev-button {
+        font-size: 3em;
+        padding: 5px 10px 10px;
+    }
+
+    #navigation button#info-button.hide {
+        opacity: 0.5;
+    }
+    </style>
+</head>
+<body>
+    <div id="main">
+        <div id="slideshow-container">
+            <img src="./loading.svg" alt="loading" id="loading-image">
+        </div>
+        <div id="navigation">
+            <button id="prev-button">‹</button>
+            <button id="info-button" class="show">ⓘ</button>
+            <button id="fullscreen-button" onClick="openFullscreen()">⤡</button>
+            <button id="pause-button">◼</button>
+            <button id="play-button" style="display: none;">▶</button>
+            <button id="next-button">›</button>
+        </div>
+    </div>
+    <script type="text/javascript">
+    jQuery(document).ready(function($) {
+
+        // Get all images in ./images directory
+        $.ajax({
+            url : "./images/",
+            success: function (data) {
+                $(data).find("td > a").each(function () {
+                    var imageUrl = $(this).attr("href");
+                    if (imageUrl.indexOf("jpg") >= 0) {
+                        $("#slideshow-container").append("<figure><img data-src='./images/" + imageUrl + "' alt='" + imageUrl + "'></figure>");
+                    }
+                });
+
+                // Shuffle the images
+                var images = $("#slideshow-container figure");
+                for (var i = 0; i < images.length; i++) {
+                    var randomIndex = Math.floor(Math.random() * images.length);
+                    var temp = images[i];
+                    images[i] = images[randomIndex];
+                    images[randomIndex] = temp;
+                }
+
+                // prepare for slideshow
+                const transitionTime = 500;
+                const delayTime = 5000
+                $("#play-button").fadeOut(0);
+
+                // Hide loading image and show first image
+                // $("#loading-image").hide();
+                $(images[0].getElementsByTagName('img')[0]).attr('src', $(images[0].getElementsByTagName('img')[0]).data('src'));
+                $(images[1].getElementsByTagName('img')[0]).attr('src', $(images[1].getElementsByTagName('img')[0]).data('src'));
+                $(images[0]).fadeIn();
+                $(images[0]).addClass('active');
+                addCaption(images[0]);
+
+                // Set interval and transition effect at begining
+                var currentIndex = 0;
+                var intervalId = setInterval( function() {
+                    currentIndex = play(currentIndex);
+                }, delayTime);
+
+                // Slideshow player
+                function play(inputIndex) {
+                    var currentIndex = inputIndex;
+                    $(images[currentIndex]).fadeOut(transitionTime);
+                    $(images[currentIndex]).removeClass('active');
+                    var currentIndex = (currentIndex + 1) % images.length;
+                    nextIndex = (currentIndex + 2) % images.length;
+                    if ( ! $(images[currentIndex].getElementsByTagName('img')[0]).attr('src') ) {
+                        $(images[currentIndex].getElementsByTagName('img')[0]).attr('src', $(images[currentIndex].getElementsByTagName('img')[0]).data('src'));
+                    }
+                    $(images[currentIndex]).fadeIn(transitionTime);
+                    $(images[currentIndex]).addClass('active');
+                    addCaption(images[currentIndex]);
+                    if ( ! $(images[nextIndex].getElementsByTagName('img')[0]).attr('src') ) {
+                        $(images[nextIndex].getElementsByTagName('img')[0]).attr('src', $(images[nextIndex].getElementsByTagName('img')[0]).data('src'));
+                    }
+                    return currentIndex;
+                }
+
+                // Add caption to figure based on xmp and exif data
+                function addCaption(theImage) {
+                    var imgActive = new Image();
+                    imgActive.onload = function() { getExif(); }
+                    imgActive.src = jQuery(theImage.getElementsByTagName('img')[0]).data('src');
+                }
+
+
+                // Add navigation buttons
+                $("#prev-button").click(function() {
+                    // clearInterval(intervalId);
+                    $(images[currentIndex]).fadeOut(transitionTime);
+                    $(images[currentIndex]).removeClass('active');
+                    currentIndex = (currentIndex - 1 + images.length) % images.length;
+                    if ( ! $(images[currentIndex].getElementsByTagName('img')[0]).attr('src') ) {
+                        $(images[currentIndex].getElementsByTagName('img')[0]).attr('src', $(images[currentIndex].getElementsByTagName('img')[0]).data('src'));
+                    }
+                    $(images[currentIndex]).fadeIn(transitionTime);
+                    $(images[currentIndex]).addClass('active');
+                    addCaption(images[currentIndex]);
+                });
+
+                $("#next-button").click(function() {
+                    // clearInterval(intervalId);
+                    $(images[currentIndex]).fadeOut(transitionTime);
+                    $(images[currentIndex]).removeClass('active');
+                    currentIndex = (currentIndex + 1) % images.length;
+                    nextIndex = (currentIndex + 2) % images.length;
+                    if ( ! $(images[currentIndex].getElementsByTagName('img')[0]).attr('src') ) {
+                        $(images[currentIndex].getElementsByTagName('img')[0]).attr('src', $(images[currentIndex].getElementsByTagName('img')[0]).data('src'));
+                    }
+                    $(images[currentIndex]).fadeIn(transitionTime);
+                    $(images[currentIndex]).addClass('active');
+                    addCaption(images[currentIndex]);
+                });
+
+                // Pause and Play button actions
+                $("#pause-button").click(function() {
+                    clearInterval(intervalId);
+                    $("#pause-button").fadeOut(0);
+                    $("#play-button").fadeIn(100)
+                });
+                $("#play-button").click(function() {
+                    intervalId = setInterval( function() {
+                        currentIndex = play(currentIndex);
+                    }, delayTime);
+                    $("#play-button").fadeOut(0);
+                    $("#pause-button").fadeIn(100)
+                });
+
+                // Info button actions
+                $("#info-button").click(function() {
+                    setTimeout( function() {
+                        if ( $("#info-button").hasClass('show') ) {
+                            $("#info-button").removeClass('show').addClass('hide');
+                        } else {
+                            $("#info-button").removeClass('hide').addClass('show');
+                        }
+                    }, 200);
+                });
+            }
+        });
+
+    });
+
+    function getExif() {
+        if ( ! jQuery('figure.active figcaption').length && jQuery("#info-button").hasClass('show') )  {
+            figure = jQuery('figure.active')[0];
+            img = jQuery('figure.active img')[0];
+            EXIF.getData(img, function() {
+                allMetaData = EXIF.getAllTags(this);
+                if ( 'ExposureTime' in allMetaData && allMetaData['ExposureTime'] >= 1 ) {
+                    ExposureTime = allMetaData['ExposureTime'] + 's';
+                } else if ( 'ExposureTime' in allMetaData && allMetaData['ExposureTime'] < 1 ) {
+                    ExposureTime = '1/' + ( 1 / allMetaData['ExposureTime'] ) + 's';
+                } else {
+                    ExposureTime = null;
+                }
+
+                if ( 'FNumber' in allMetaData ) {
+                    FNumber = 'f/' + allMetaData['FNumber'];
+                } else {
+                    FNumber = null;
+                }
+
+                if ( 'ISOSpeedRatings' in allMetaData ) {
+                    ISOSpeedRatings = 'ISO' + allMetaData['ISOSpeedRatings'];
+                } else {
+                    ISOSpeedRatings = null;
+                }
+
+                if ( 'FocalLength' in allMetaData ) {
+                    FocalLength = allMetaData['FocalLength'] + 'mm';
+                } else {
+                    FocalLength = null;
+                }
+
+                if ( 'Artist' in allMetaData ) {
+                    Artist = allMetaData['Artist'];
+                } else {
+                    Artist = null;
+                }
+                if ( 'DateTimeOriginal' in allMetaData ) {
+                    dateTime = new Date(allMetaData['DateTimeOriginal'].replace(':', '/').replace(':', '/'));
+                    var DateTimeOriginal = dateTime.toLocaleDateString("en-US", {day:'numeric', month:'long', year:'numeric'});
+                } else {
+                    DateTimeOriginal = null;
+                }
+
+                node = document.createElement("figcaption");
+                // textnode = document.createTextNode( JSON.stringify(allMetaData, null, "\t") );
+                textnode = document.createTextNode( 'File: ' + jQuery(img).attr('alt') );
+                node.appendChild(textnode);
+                figure.appendChild(node);
+                node.innerHTML = node.innerHTML + '<br>';
+
+                if ( Artist ) {
+                    node.innerHTML = node.innerHTML + 'Photographer: ' + Artist;
+                    node.innerHTML = node.innerHTML + '<br>';
+                }
+
+                if ( DateTimeOriginal ) {
+                    node.innerHTML = node.innerHTML + 'Date: ' + DateTimeOriginal;
+                    node.innerHTML = node.innerHTML + '<br>';
+                }
+
+                if ( 'Model' in allMetaData ) {
+                    node.innerHTML = node.innerHTML + 'EXIF: ' + allMetaData['Model'] + ' ';
+                }
+                if ( ExposureTime ) {
+                    node.innerHTML = node.innerHTML + ExposureTime + ' ';
+                }
+                if ( FNumber ) {
+                    node.innerHTML = node.innerHTML + FNumber + ' ';
+                }
+                if ( ISOSpeedRatings ) {
+                    node.innerHTML = node.innerHTML + ISOSpeedRatings + ' ';
+                }
+                if ( FocalLength ) {
+                    node.innerHTML = node.innerHTML + FocalLength;
+                }
+
+            });
+
+            filePath = jQuery(img).attr('src');
+            var request = new XMLHttpRequest();
+            request.open('GET', filePath, true);
+            request.responseType = 'blob';
+            request.onload = function() {
+                var reader = new FileReader();
+                reader.onload =  function(e){
+                    let xmp = new XMP(e.target.result);
+                    raw = xmp.find();
+                    // parsed = JSON.stringify(xmp.parse(), null, 4);
+                    if ( 'subject' in xmp.parse() ) {
+                        keywords = xmp.parse()['subject'];
+                        node.innerHTML = node.innerHTML + '<br>';
+                        node.innerHTML = node.innerHTML + 'Keywords: ' + keywords.join(', ');
+                    }
+                };
+                reader.readAsDataURL(request.response);
+            };
+            request.send();
+        }
+    }
+
+    var fullScreenElement = document.getElementById("main");
+    function openFullscreen() {
+        if (fullScreenElement.requestFullscreen) {
+            fullScreenElement.requestFullscreen();
+        } else if (fullScreenElement.webkitRequestFullscreen) { /* Safari */
+            fullScreenElement.webkitRequestFullscreen();
+        } else if (fullScreenElement.msRequestFullscreen) { /* IE11 */
+            fullScreenElement.msRequestFullscreen();
+        }
+    }
+
+    </script>
+</body>
+</html>
