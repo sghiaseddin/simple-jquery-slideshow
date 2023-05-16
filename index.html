@@ -98,16 +98,16 @@
     </style>
 </head>
 <body>
-    <div id="main">
+    <div id="main" onmouseover="showNavigation()">
         <div id="slideshow-container">
             <img src="./loading.svg" alt="loading" id="loading-image">
         </div>
         <div id="navigation">
-            <button id="prev-button">‹</button>
             <button id="info-button" class="show">ⓘ</button>
             <button id="fullscreen-button" onClick="openFullscreen()">⤡</button>
             <button id="pause-button">◼</button>
             <button id="play-button" style="display: none;">▶</button>
+            <button id="prev-button">‹</button>
             <button id="next-button">›</button>
         </div>
     </div>
@@ -136,7 +136,7 @@
 
                 // prepare for slideshow
                 const transitionTime = 500;
-                const delayTime = 5000
+                const delayTime = 3000;
                 $("#play-button").fadeOut(0);
 
                 // Hide loading image and show first image
@@ -159,16 +159,22 @@
                     $(images[currentIndex]).fadeOut(transitionTime);
                     $(images[currentIndex]).removeClass('active');
                     var currentIndex = (currentIndex + 1) % images.length;
-                    nextIndex = (currentIndex + 2) % images.length;
+                    nextIndex = (currentIndex + 1) % images.length;
                     if ( ! $(images[currentIndex].getElementsByTagName('img')[0]).attr('src') ) {
                         $(images[currentIndex].getElementsByTagName('img')[0]).attr('src', $(images[currentIndex].getElementsByTagName('img')[0]).data('src'));
                     }
                     $(images[currentIndex]).fadeIn(transitionTime);
                     $(images[currentIndex]).addClass('active');
-                    addCaption(images[currentIndex]);
                     if ( ! $(images[nextIndex].getElementsByTagName('img')[0]).attr('src') ) {
                         $(images[nextIndex].getElementsByTagName('img')[0]).attr('src', $(images[nextIndex].getElementsByTagName('img')[0]).data('src'));
                     }
+
+                    var imgToLoad = new Image();
+                    imgToLoad.onload = function() { $('figure.active').addClass('loaded'); }
+                    imgToLoad.src = $(images[currentIndex].getElementsByTagName('img')[0]).data('src');
+
+                    if ( ! $(images[currentIndex]).hasClass('loaded') ) return inputIndex;
+                    addCaption(images[currentIndex]);
                     return currentIndex;
                 }
 
@@ -227,11 +233,14 @@
                     setTimeout( function() {
                         if ( $("#info-button").hasClass('show') ) {
                             $("#info-button").removeClass('show').addClass('hide');
+                            $("head style").last().after("<style id='hide_figcaptions' type='text/css'>figure > figcaption { display:none !important; }</style>");
                         } else {
                             $("#info-button").removeClass('hide').addClass('show');
+                            $("head style#hide_figcaptions").remove();
                         }
                     }, 200);
                 });
+
             }
         });
 
@@ -243,10 +252,16 @@
             img = jQuery('figure.active img')[0];
             EXIF.getData(img, function() {
                 allMetaData = EXIF.getAllTags(this);
+
                 if ( 'ExposureTime' in allMetaData && allMetaData['ExposureTime'] >= 1 ) {
                     ExposureTime = allMetaData['ExposureTime'] + 's';
                 } else if ( 'ExposureTime' in allMetaData && allMetaData['ExposureTime'] < 1 ) {
-                    ExposureTime = '1/' + ( 1 / allMetaData['ExposureTime'] ) + 's';
+                    invertNumber = ( 1 / allMetaData['ExposureTime'] );
+                    if ( countDecimals(invertNumber) >= 3 ) {
+                        ExposureTime = '1/' + invertNumber.toFixed(2) + 's';
+                    } else {
+                        ExposureTime = '1/' + invertNumber + 's';
+                    }
                 } else {
                     ExposureTime = null;
                 }
@@ -349,6 +364,22 @@
         }
     }
 
+    function countDecimals(value) {
+        if ( Math.floor(value) === value ) return 0;
+        return value.toString().split(".")[1].length || 0;
+    }
+
+    // show navigation div on mouse move
+    function showNavigation() {
+        clearTimeout(navTimeout);
+        if ( jQuery("#navigation:visible").length == 0 ) {
+            jQuery("#navigation").fadeIn(100);
+        } else {
+            var navTimeout = setTimeout( function() {
+                jQuery("#navigation").fadeOut(1000);
+            }, 12000);
+        }
+    }
     </script>
 </body>
 </html>
